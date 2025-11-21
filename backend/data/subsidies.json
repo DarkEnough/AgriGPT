@@ -1,0 +1,43 @@
+[
+  {
+    "id": "pm_kisan",
+    "scheme_name": "PM-Kisan Samman Nidhi",
+    "government_level": "Central",
+    "eligibility": "All landholding farmer families.",
+    "benefits": "₹6,000 per year in three equal installments of ₹2,000.",
+    "application_steps": "Register online at pmkisan.gov.in or via Common Service Centers (CSCs).",
+    "documents": "Aadhaar Card, Land Ownership Papers, Bank Account Details.",
+    "notes": "Institutional landholders are not eligible. eKYC is mandatory."
+  },
+  {
+    "id": "pmksy_micro",
+    "scheme_name": "Pradhan Mantri Krishi Sinchayee Yojana (PMKSY) - Per Drop More Crop",
+    "government_level": "Central & State",
+    "eligibility": "Farmers of all categories. Priority to small and marginal farmers.",
+    "benefits": "Subsidy for drip/sprinkler irrigation systems. Small/Marginal farmers: 55% subsidy. Other farmers: 45% subsidy. Some states like Tamil Nadu provide up to 100% for small farmers.",
+    "application_steps": "Apply via state horticulture department portal or MIMI portal.",
+    "documents": "Land chitta/adangal, Aadhaar, Photo, Bank passbook, Quotation from registered vendor.",
+    "notes": "GST is usually extra and borne by the farmer in some states."
+  },
+  {
+    "id": "kcc",
+    "scheme_name": "Kisan Credit Card (KCC)",
+    "government_level": "Central",
+    "eligibility": "All farmers, tenant farmers, oral lessees, and SHGs.",
+    "benefits": "Short-term crop loans at low interest (effective 4% if repaid timely). Credit limit based on crop scale of finance.",
+    "application_steps": "Visit nearest bank branch or apply online via bank website.",
+    "documents": "Land revenue records, Identity proof, Address proof.",
+    "notes": "Interest subvention of 2% and Prompt Repayment Incentive of 3% available."
+  },
+  {
+    "id": "soil_health_card",
+    "scheme_name": "Soil Health Card Scheme",
+    "government_level": "Central",
+    "eligibility": "All farmers.",
+    "benefits": "Soil testing report with fertilizer recommendations.",
+    "application_steps": "Collect soil sample and submit to nearest Soil Testing Lab or Agriculture Office.",
+    "documents": "Aadhaar, Land details.",
+    "notes": "Cards are issued every 2-3 years."
+  }
+]
+

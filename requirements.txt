@@ -7,3 +7,6 @@ langchain
 langchain-community
 langchain-core
 langchain-groq
+sentence-transformers
+faiss-cpu
+numpy

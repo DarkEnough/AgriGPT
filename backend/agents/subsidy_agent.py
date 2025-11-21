@@ -1,6 +1,6 @@
 from backend.services.text_service import query_groq_text
 from backend.agents.agri_agent_base import AgriAgentBase
-
+from backend.services.rag_service import rag_service
 
 class SubsidyAgent(AgriAgentBase):
     """
@@ -45,7 +45,24 @@ class SubsidyAgent(AgriAgentBase):
         query_clean = query.strip()
 
         # ------------------------------------------------------
-        # CASE 2 — Build AI prompt
+        # CASE 2 — RAG Retrieval
+        # ------------------------------------------------------
+        retrieved_docs = rag_service.retrieve(query_clean)
+        context_str = ""
+        if retrieved_docs:
+            context_str = "\n\n**Retrieved Official Information:**\n"
+            for i, doc in enumerate(retrieved_docs, 1):
+                context_str += (
+                    f"Scheme {i}: {doc['scheme_name']}\n"
+                    f"- Eligibility: {doc['eligibility']}\n"
+                    f"- Benefits: {doc['benefits']}\n"
+                    f"- Application: {doc['application_steps']}\n"
+                    f"- Documents: {doc['documents']}\n"
+                    f"- Notes: {doc['notes']}\n\n"
+                )
+
+        # ------------------------------------------------------
+        # CASE 3 — Build AI prompt
         # ------------------------------------------------------
         prompt = f"""
         You are AgriGPT, an expert assistant on Indian agricultural subsidies and schemes.
@@ -53,14 +70,18 @@ class SubsidyAgent(AgriAgentBase):
         The farmer asked:
         \"\"\"{query_clean}\"\"\"
 
-        Provide accurate, clear details including:
+        {context_str}
 
+        If the Retrieved Official Information matches the user's query, USE IT as your primary source.
+        If the context doesn't answer the question fully, rely on your general knowledge but be careful with numbers.
+
+        Provide accurate, clear details including:
         1. Name of the scheme/subsidy
-        2. Central or State government (mention state if known)
-        3. Who is eligible (small farmers, all farmers, SC/ST, women, etc.)
-        4. Financial benefits / subsidy percentage / maximum amount
-        5. How to apply (portal, department, documents)
-        6. Important notes (limits, conditions, deadlines, Aadhaar requirement)
+        2. Central or State government
+        3. Eligibility
+        4. Financial benefits
+        5. Application process
+        6. Important notes
 
         Style:
         - Simple language
@@ -69,7 +90,7 @@ class SubsidyAgent(AgriAgentBase):
         """
 
         # ------------------------------------------------------
-        # CASE 3 — Query Groq LLM safely
+        # CASE 4 — Query Groq LLM safely
         # ------------------------------------------------------
         try:
             result = query_groq_text(prompt)
