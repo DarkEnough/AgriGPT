@@ -1,0 +1,36 @@
+.env.example
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local temp/cache
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store
+.eslintcache
+
+# Vite
+vite.config.timestamp.*
+.vite/
+
+# React image build artifacts
+*.png
+*.jpg
+*.webp
+*.jpeg
+*.gif
+
+# Lovable AI plugin temp
+.lovable/

@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =========================================
+   AgriGPT Design System (HSL-based)
+   DO NOT include component styling here.
+========================================= */
+
+@layer base {
+  :root {
+    --background: 40 30% 97%;
+    --foreground: 140 30% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 140 30% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 140 30% 15%;
+
+    --primary: 142 76% 36%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 38 50% 88%;
+    --secondary-foreground: 140 30% 15%;
+
+    --muted: 40 30% 94%;
+    --muted-foreground: 140 20% 45%;
+
+    --accent: 142 65% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 20% 88%;
+    --input: 40 20% 90%;
+    --ring: 142 76% 36%;
+
+    --radius: 0.75rem;
+
+    /* Agricultural tones */
+    --farm-green: 142 76% 36%;
+    --farm-green-light: 142 65% 88%;
+    --farm-earth: 38 40% 60%;
+    --farm-cream: 40 30% 97%;
+  }
+
+  .dark {
+    --background: 140 20% 8%;
+    --foreground: 40 30% 95%;
+
+    --card: 140 20% 10%;
+    --card-foreground: 40 30% 95%;
+
+    --popover: 140 20% 10%;
+    --popover-foreground: 40 30% 95%;
+
+    --primary: 142 65% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 140 15% 15%;
+    --secondary-foreground: 40 30% 95%;
+
+    --muted: 140 15% 15%;
+    --muted-foreground: 40 20% 65%;
+
+    --accent: 142 60% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 140 15% 20%;
+    --input: 140 15% 20%;
+    --ring: 142 65% 45%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: system-ui, sans-serif;
+  }
+}

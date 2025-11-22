@@ -1,7 +1,48 @@
-<!--
-AgriGPT web client HTML entry point.
-Loads assets and mounts the UI defined in app.js with styles from style.css.
-Interacts with FastAPI endpoints exposed by backend/main.py.
--->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
 
+    <!-- Mobile-friendly -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- Title -->
+    <title>AgriGPT – Your Farming Assistant</title>
+
+    <!-- SEO -->
+    <meta
+      name="description"
+      content="AI-powered farming assistant for crop advice, pest diagnosis, plant disease detection, and agricultural guidance."
+    />
+    <meta name="author" content="AgriGPT Team" />
+
+    <!-- OpenGraph (Social Sharing) -->
+    <meta property="og:title" content="AgriGPT – Your Farming Assistant" />
+    <meta
+      property="og:description"
+      content="AI-powered farming assistant for crop advice, pest diagnosis, and agricultural insights."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:url" content="https://yourdomain.com" />
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/png" href="/favicon.png" />
+
+    <!-- Theme color for mobile browser -->
+    <meta name="theme-color" content="#3c9c54" />
+
+    <!-- Prevent zoom on mobile if desired -->
+    <!-- <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" /> -->
+
+    <!-- Manifest (optional if you add PWA later) -->
+    <!-- <link rel="manifest" href="/manifest.json" /> -->
+  </head>
+
+  <body>
+    <div id="root"></div>
+
+    <!-- Main React script -->
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
