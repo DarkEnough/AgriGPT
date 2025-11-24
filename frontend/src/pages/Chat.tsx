@@ -52,10 +52,11 @@ const Chat = () => {
       const response = await askChat(text, image);
 
       // Add assistant reply
+      // Backend returns 'analysis' field, not 'response'
       addMessage({
         role: "assistant",
-        content: response.response,
-        agent: response.agent
+        content: response.analysis,
+        agent: "AgriGPT" // We don't get specific agent name in the new response model yet, default to generic
       });
 
       toast.success("Response received");

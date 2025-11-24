@@ -1,9 +1,10 @@
 import { apiClient } from "./client";
 
 export interface ApiResponse {
-  response: string;
-  agent?: string;
-  timestamp?: string;
+  analysis: string;
+  request_id?: string;
+  status?: string;
+  input?: any;
 }
 
 interface FormDataPayload {
@@ -43,7 +44,17 @@ async function postJson<TBody extends object>(
   url: string,
   body: TBody
 ): Promise<ApiResponse> {
-  const res = await apiClient.post<ApiResponse>(url, body);
+  // The backend /ask/text endpoint expects FORM DATA for the 'query' field,
+  // NOT JSON body.
+  // But wait, looking at the backend code:
+  // async def ask_text(query: str = Form(...))
+  // So we must use FormData or x-www-form-urlencoded, NOT application/json.
+  
+  const fd = new FormData();
+  // @ts-ignore
+  if (body.query) fd.append("query", body.query);
+
+  const res = await apiClient.post<ApiResponse>(url, fd);
   return res.data;
 }
 

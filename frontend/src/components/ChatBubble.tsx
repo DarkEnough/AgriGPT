@@ -97,7 +97,7 @@ const ChatBubble = ({ message }: ChatBubbleProps) => {
             isUser ? "text-right" : "text-left"
           )}
         >
-          {format(message.timestamp, "HH:mm")}
+          {format(new Date(message.timestamp), "HH:mm")}
         </div>
       </div>
     </div>
