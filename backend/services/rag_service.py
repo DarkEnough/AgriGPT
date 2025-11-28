@@ -1,5 +1,3 @@
-# backend/services/rag_service.py
-
 import json
 import os
 from typing import List, Dict
@@ -13,9 +11,10 @@ from langchain_core.documents import Document
 DATA_PATH = os.path.join(os.path.dirname(__file__), "../data/subsidies.json")
 VECTOR_DB_PATH = os.path.join(os.path.dirname(__file__), "../data/faiss_index")
 
-
+# -------------------------------
+# Query cleaning (FAISS-safe)
+# -------------------------------
 def _clean_query(text: str) -> str:
-    """Clean query for FAISS safety."""
     if not isinstance(text, str):
         return ""
     text = unicodedata.normalize("NFKC", text)
@@ -25,6 +24,12 @@ def _clean_query(text: str) -> str:
 
 
 class RAG:
+    """
+    RAG singleton for subsidy retrieval.
+    - OpenAPI-safe (returns plain dicts only)
+    - FAISS-backed
+    """
+
     _instance = None
 
     def __new__(cls):
@@ -34,31 +39,38 @@ class RAG:
         return cls._instance
 
     def initialize(self):
-        self.embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        # ✅ Slightly stronger embeddings (better semantic recall)
+        self.embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L12-v2"
+        )
+
         self.vector_store = None
 
-        # Try load FAISS
+        # ---------------------------------------------------
+        # Attempt to load existing FAISS index
+        # ---------------------------------------------------
         if os.path.exists(VECTOR_DB_PATH):
             try:
-                print("Loading existing FAISS index...")
+                print("[RAG] Loading existing FAISS index...")
                 self.vector_store = FAISS.load_local(
                     VECTOR_DB_PATH,
                     self.embeddings,
-                    allow_dangerous_deserialization=True
+                    allow_dangerous_deserialization=True,
                 )
-                print("FAISS index loaded.")
+                print("[RAG] FAISS index loaded.")
                 return
             except Exception as e:
                 print(f"[RAG] Failed to load FAISS index: {e}")
-                print("[RAG] Rebuilding fresh index...")
+                print("[RAG] Rebuilding index...")
                 try:
                     import shutil
-                    if os.path.exists(VECTOR_DB_PATH):
-                        shutil.rmtree(VECTOR_DB_PATH)
-                except:
+                    shutil.rmtree(VECTOR_DB_PATH)
+                except Exception:
                     pass
 
-        # Build new index
+        # ---------------------------------------------------
+        # Build FAISS index from subsidies.json
+        # ---------------------------------------------------
         if not os.path.exists(DATA_PATH):
             print(f"[RAG] subsidies.json not found at: {DATA_PATH}")
             return
@@ -66,7 +78,8 @@ class RAG:
         with open(DATA_PATH, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
 
-        documents = []
+        documents: List[Document] = []
+
         for item in raw_data:
             scheme_name = item.get("scheme_name", "Unknown Scheme")
             eligibility = item.get("eligibility", "Not Provided")
@@ -80,40 +93,48 @@ class RAG:
                 f"Notes: {notes}\n"
             )
 
-            documents.append(
-                Document(page_content=content, metadata=item)
-            )
+            documents.append(Document(page_content=content, metadata=item))
 
         print("[RAG] Building FAISS index...")
         self.vector_store = FAISS.from_documents(documents, self.embeddings)
         self.vector_store.save_local(VECTOR_DB_PATH)
-        print("[RAG] FAISS index built and saved successfully.")
+        print("[RAG] FAISS index built and saved.")
 
+    # ---------------------------------------------------
+    # Retrieval (OpenAPI-safe)
+    # ---------------------------------------------------
     def retrieve(self, query: str, k: int = 2) -> List[Dict[str, str]]:
         """
-        ✅ SAFE: Returns plain dicts (no Pydantic).
-        OpenAPI will never touch this.
+        ✅ Returns plain dicts only.
+        ✅ Applies similarity score threshold.
         """
         if not query or not query.strip():
             return []
 
-        query_clean = _clean_query(query)
+        # ✅ Context-boosting for subsidy domain
+        query_clean = _clean_query(query.strip() + " india agriculture subsidy")
 
         if not self.vector_store:
             print("[RAG] Vector store not loaded.")
             return []
 
         try:
-            docs = self.vector_store.similarity_search(query_clean, k=k)
+            docs_with_scores = self.vector_store.similarity_search_with_score(
+                query_clean, k=k
+            )
         except Exception as e:
             print(f"[RAG] Retrieval error: {e}")
             return []
 
-        results = []
-        for d in docs:
-            meta = d.metadata or {}
-            
-            # ✅ Return plain dict (OpenAPI-safe)
+        results: List[Dict[str, str]] = []
+
+        for doc, score in docs_with_scores:
+            # ✅ Distance threshold (tunable, conservative)
+            if score > 0.7:
+                continue
+
+            meta = doc.metadata if isinstance(doc.metadata, dict) else {}
+
             results.append({
                 "scheme_name": str(meta.get("scheme_name", "Unknown Scheme")),
                 "eligibility": str(meta.get("eligibility", "Not Provided")),
@@ -126,5 +147,5 @@ class RAG:
         return results
 
 
-# Singleton instance
+# ✅ Singleton instance
 rag_service = RAG()

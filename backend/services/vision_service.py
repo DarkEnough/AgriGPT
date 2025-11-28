@@ -2,43 +2,43 @@
 """
 FINAL Vision Service – Python 3.13 Safe
 ---------------------------------------
-- Removes deprecated imghdr
-- Uses magic-byte detection (PNG/JPEG only)
-- Always returns pure string (OpenAPI safe)
-- No dictionary or list output EVER
+- Uses meta-llama/llama-4-scout-17b-16e-instruct (native multimodal)
+- Magic-byte MIME detection (PNG/JPEG only)
+- OpenAPI-safe: ALWAYS returns plain string
+- Zero hallucination tolerance
 """
 
 from __future__ import annotations
 import base64
 import os
 import time
+from typing import Any
 
 from groq import Groq
 from backend.core.config import settings
 
+# ---------------------------------------------------------
+# Constants
+# ---------------------------------------------------------
 MAX_RETRIES = 3
-BACKOFF = [1, 2, 4]   # retry delays
+RETRY_BACKOFF = (1, 2, 4)
+MAX_IMAGE_BYTES = 8 * 1024 * 1024  # 8 MB
+MAX_VISION_PROMPT_CHARS = 2000
 
 
 # ---------------------------------------------------------
-# MIME Detection (No imghdr, Python 3.13 safe)
+# MIME Detection (Python 3.13 safe)
 # ---------------------------------------------------------
 def _detect_mime(image_path: str) -> str:
-    """
-    Detect PNG / JPEG using magic bytes.
-    No imghdr (removed in Python 3.13).
-    """
     try:
         with open(image_path, "rb") as f:
             header = f.read(10)
     except Exception:
         return "unknown"
 
-    # PNG magic bytes: 89 50 4E 47
     if header.startswith(b"\x89PNG"):
         return "image/png"
 
-    # JPEG magic bytes: FF D8
     if header.startswith(b"\xFF\xD8"):
         return "image/jpeg"
 
@@ -46,83 +46,86 @@ def _detect_mime(image_path: str) -> str:
 
 
 # ---------------------------------------------------------
-# Normalize response to ALWAYS string
+# Normalize output to ALWAYS string
 # ---------------------------------------------------------
-def _normalize_output(o) -> str:
-    if not o:
+def _normalize_output(output: Any) -> str:
+    if output is None:
         return ""
-
-    if isinstance(o, str):
-        return o.strip()
-
-    # Lists → join lines
-    if isinstance(o, list):
-        try:
-            return "\n".join(_normalize_output(x) for x in o)
-        except:
-            return str(o)
-
-    # Dict → flatten
-    if isinstance(o, dict):
-        try:
-            return "\n".join(f"{k}: {v}" for k, v in o.items())
-        except:
-            return str(o)
-
-    return str(o).strip()
+    if isinstance(output, str):
+        return output.strip()
+    if isinstance(output, list):
+        return "\n".join(_normalize_output(x) for x in output)
+    if isinstance(output, dict):
+        return "\n".join(f"{k}: {v}" for k, v in output.items())
+    return str(output).strip()
 
 
 # ---------------------------------------------------------
-# MAIN VISION FUNCTION (SAFE)
+# MAIN VISION FUNCTION
 # ---------------------------------------------------------
 def query_groq_image(image_path: str, prompt: str) -> str:
-    """
-    Always returns a clean string — never dict/list.
-    Works with Python 3.13 (no imghdr).
-    """
 
-    # Validate file existence
-    if not os.path.exists(image_path):
-        return "Error: Image file does not exist."
+    # ---- File validation ---------------------------------
+    if not image_path or not os.path.exists(image_path):
+        return "The image file was not found."
 
-    # Validate file size
-    if os.path.getsize(image_path) > 8 * 1024 * 1024:
-        return "Error: Image too large (max 8MB)."
+    if os.path.getsize(image_path) > MAX_IMAGE_BYTES:
+        return "The image is too large. Please upload an image under 8MB."
 
-    # Detect MIME type
     mime = _detect_mime(image_path)
     if mime not in ("image/png", "image/jpeg"):
-        return "Unsupported image format. Please upload PNG or JPG."
+        return "Unsupported image format. Please upload a PNG or JPG image."
 
-    # Load bytes
     try:
         with open(image_path, "rb") as f:
-            raw = f.read()
+            raw_bytes = f.read()
     except Exception:
-        return "Error reading image file."
+        return "The image could not be read."
 
-    if not raw:
-        return "Error: Image file is empty."
+    if not raw_bytes:
+        return "The image file appears to be empty."
 
-    # Base64 encode
-    b64 = base64.b64encode(raw).decode("utf-8")
-    image_url = f"data:{mime};base64,{b64}"
+    # ---- Prompt safety -----------------------------------
+    if not isinstance(prompt, str):
+        prompt = ""
 
-    # Retry loop
+    if len(prompt) > MAX_VISION_PROMPT_CHARS:
+        prompt = prompt[:MAX_VISION_PROMPT_CHARS] + " [Prompt truncated]"
+
+    # ---- Encode image ------------------------------------
+    image_b64 = base64.b64encode(raw_bytes).decode("utf-8")
+    image_url = f"data:{mime};base64,{image_b64}"
+
+    # ---- Client creation (no globals) --------------------
+    client = Groq(
+        api_key=settings.GROQ_API_KEY,
+        timeout=30,
+    )
+
+    # ---- Retry loop --------------------------------------
     for attempt in range(MAX_RETRIES):
         try:
-            client = Groq(
-                api_key=settings.GROQ_API_KEY,
-                timeout=30,
-            )
-
             completion = client.chat.completions.create(
                 model=settings.VISION_MODEL_NAME,
                 messages=[
                     {
                         "role": "system",
                         "content": (
-                            "You are AgriGPT Vision, an expert crop disease classifier."
+                            "You are AgriGPT Vision, a multimodal agricultural image "
+                            "observation assistant.\n\n"
+                            "Your task is to describe ONLY what is clearly visible in the image.\n\n"
+                            "STRICT RULES:\n"
+                            "- Do NOT guess pests, diseases, or causes\n"
+                            "- Do NOT hallucinate unseen symptoms\n"
+                            "- Do NOT infer crop stage or health unless clearly visible\n"
+                            "- If uncertain, say so clearly\n\n"
+                            "ALLOWED:\n"
+                            "- Describe visible spots, discoloration, holes, insects, mold, wilting\n"
+                            "- Mention blur, poor lighting, or unclear image quality\n\n"
+                            "OUTPUT STYLE:\n"
+                            "- Bullet points\n"
+                            "- Simple, farmer-friendly language\n"
+                            "- No technical jargon unless unavoidable"
                         ),
                     },
                     {
@@ -134,21 +137,28 @@ def query_groq_image(image_path: str, prompt: str) -> str:
                     },
                 ],
                 max_tokens=900,
-                temperature=0.4,
+                temperature=0.3,
                 top_p=1.0,
             )
 
-            msg = ""
-            try:
-                msg = completion.choices[0].message.content
-            except:
-                msg = "Could not analyze the image."
+            result = _normalize_output(
+                completion.choices[0].message.content
+            )
 
-            return _normalize_output(msg)
+            if not result or len(result) < 5:
+                return (
+                    "The image could not be analyzed clearly. "
+                    "Please upload a clearer image."
+                )
+
+            return result
 
         except Exception as e:
             if attempt < MAX_RETRIES - 1:
-                time.sleep(BACKOFF[attempt])
+                time.sleep(RETRY_BACKOFF[attempt])
                 continue
 
-            return f"Groq vision model error: {str(e)}"
+            return (
+                "The image could not be analyzed at this time. "
+                "Please try again later."
+            )

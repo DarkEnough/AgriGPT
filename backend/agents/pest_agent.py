@@ -1,5 +1,3 @@
-# backend/agents/pest_agent.py
-
 from backend.services.text_service import query_groq_text
 from backend.services.vision_service import query_groq_image
 from backend.agents.agri_agent_base import AgriAgentBase
@@ -7,95 +5,74 @@ from backend.agents.agri_agent_base import AgriAgentBase
 
 class PestAgent(AgriAgentBase):
     """
-    Pest & Disease Agent
-    Handles both image-based and text-based diagnosis.
+    PestAgent:
+    Handles pest, disease, and visible symptom analysis.
+    Image input ALWAYS takes priority over text.
     """
 
     name = "PestAgent"
 
     def handle_query(self, query: str = None, image_path: str = None) -> str:
-        """
-        FIXED:
-        - If image_path is provided, DO NOT run text-based diagnosis.
-        - Prevents duplicate PestAgent execution in multimodal mode.
-        """
 
-        # ------------------------------------------------------
-        # CASE 0 — No input at all
-        # ------------------------------------------------------
+        # --------------------------------------------------
+        # CASE 0 — No input
+        # --------------------------------------------------
         if not query and not image_path:
-            msg = (
-                "Please upload a crop image or describe symptoms like "
-                "yellow leaves, white powder, brown patches, insects, or wilting."
+            response = (
+                "Please upload a crop image or describe visible symptoms such as "
+                "yellowing, spots, holes, insects, wilting, or abnormal leaf color."
             )
-            return self.respond_and_record(
-                "No input provided",
-                msg,
-                image_path=image_path
-            )
+            return self.respond_and_record("", response, image_path)
 
-        # ------------------------------------------------------
-        # CASE 1 — IMAGE ALWAYS TAKES PRIORITY (FIX)
-        # ------------------------------------------------------
+        # --------------------------------------------------
+        # CASE 1 — IMAGE-BASED OBSERVATION ONLY
+        # --------------------------------------------------
         if image_path:
-            # Ignore text completely if image exists
-            # -> prevents duplicate calls from master_agent
-            vision_prompt = """
-            You are AgriGPT Vision — a crop pest and disease detection expert.
-
-            Analyze this crop image and return:
-
-            1. Likely problem/pest/disease name
-            2. Key visual symptoms visible in the photo
-            3. Organic control options (neem, soap, traps, pruning, etc.)
-            4. Chemical control (last resort) — only category name
-            5. Preventive steps for next season
-
-            Use:
-            - Simple language
-            - Bullet points
-            - Short sentences
-            """
+            vision_prompt = (
+                "You are AgriGPT Vision, an agricultural image observation assistant. "
+                "Describe only what is clearly visible in the image. "
+                "Allowed observations include leaf color changes, spots, holes, chewing damage, visible insects, mold, rot, wilting, or deformation. "
+                "Do not name specific pests or diseases unless unmistakably visible. "
+                "Do not guess causes, do not recommend chemicals, and do not infer crop stage or severity. "
+                "If the image is unclear or insufficient, say so clearly."
+            )
 
             try:
                 result = query_groq_image(image_path, vision_prompt)
-            except Exception as e:
-                result = f"Error analyzing crop image: {e}"
+            except Exception:
+                result = "The image could not be analyzed clearly."
 
             return self.respond_and_record(
-                "Image-based pest analysis",
+                "Image-based symptom observation",
                 result,
-                image_path=image_path
+                image_path=image_path,
             )
 
-        # ------------------------------------------------------
-        # CASE 2 — TEXT-BASED DIAGNOSIS (Only when NO image)
-        # ------------------------------------------------------
-        query_clean = query.strip()
+        # --------------------------------------------------
+        # CASE 2 — TEXT-BASED SYMPTOM ANALYSIS
+        # --------------------------------------------------
+        clean_query = query.strip()
 
-        text_prompt = f"""
-        You are AgriGPT Pest Advisor.
-
-        The farmer described:
-        \"\"\"{query_clean}\"\"\"
-
-        Provide:
-        - Most likely pest/disease/deficiency
-        - Confirming symptoms
-        - Organic treatments (neem, soap, pruning, traps, bio-control)
-        - Chemical treatment (only category, with caution)
-        - Prevention tips
-
-        Use bullet points and simple language.
-        """
+        text_prompt = (
+            "You are AgriGPT PestAgent. "
+            "Analyze the farmer-described crop symptoms conservatively. "
+            "Do not give a definitive diagnosis and do not prescribe chemicals. "
+            "Do not override irrigation, nutrition, or crop management advice. "
+            "First summarize the main symptoms described by the farmer. "
+            "Then list two or three possible causes using conditional language only. "
+            "Suggest safe first-response actions such as monitoring, hygiene, mechanical removal, or low-risk organic practices. "
+            "Clearly state when expert field inspection or laboratory testing is required. "
+            "If symptoms may be caused by water stress or nutrient imbalance, say so explicitly. "
+            f"Farmer description: {clean_query}"
+        )
 
         try:
             result = query_groq_text(text_prompt)
-        except Exception as e:
-            result = f"Error generating pest diagnosis: {e}"
+        except Exception:
+            result = "Pest analysis could not be generated at this time."
 
         return self.respond_and_record(
-            query_clean,
+            clean_query,
             result,
-            image_path=image_path
+            image_path=image_path,
         )

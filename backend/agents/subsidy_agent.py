@@ -7,7 +7,11 @@ import unicodedata
 
 
 class SubsidyAgent(AgriAgentBase):
-    """Subsidy & Government Scheme Agent"""
+    """
+    SubsidyAgent:
+    Handles government schemes and agricultural subsidy information.
+    Uses retrieved official data as the primary source.
+    """
 
     name = "SubsidyAgent"
 
@@ -19,59 +23,54 @@ class SubsidyAgent(AgriAgentBase):
         return text.strip()
 
     def handle_query(self, query: str = None, image_path: str = None) -> str:
+
         if not query or not query.strip():
-            msg = (
-                "Please ask about a specific subsidy or government scheme:\n"
-                "- 'Drip irrigation subsidy in Tamil Nadu'\n"
-                "- 'PM-Kisan eligibility'\n"
+            response = (
+                "Please ask about a specific agricultural subsidy or government scheme. "
+                "For example, drip irrigation subsidy, PM-Kisan eligibility, or equipment support schemes."
             )
-            return self.respond_and_record("", msg, image_path)
+            return self.respond_and_record("", response, image_path)
 
         query_clean = self._sanitize_query(query)
+
         context_str = ""
 
         try:
-            # ✅ Now returns List[Dict] - safe for OpenAPI
             retrieved_docs = rag_service.retrieve(query_clean)
-            
+
             if retrieved_docs:
-                context_str += "\n\n**Retrieved Official Information:**\n"
                 for i, doc in enumerate(retrieved_docs, 1):
-                    # ✅ Dict access (not Pydantic)
                     context_str += (
-                        f"Scheme {i}: {doc['scheme_name']}\n"
-                        f"- Eligibility: {doc['eligibility']}\n"
-                        f"- Benefits: {doc['benefits']}\n"
-                        f"- Application: {doc['application_steps']}\n"
-                        f"- Documents: {doc['documents']}\n"
-                        f"- Notes: {doc['notes']}\n\n"
+                        f"Scheme information {i}: "
+                        f"Scheme name: {doc.get('scheme_name', 'Not specified')}. "
+                        f"Eligibility: {doc.get('eligibility', 'Not specified')}. "
+                        f"Benefits: {doc.get('benefits', 'Not specified')}. "
+                        f"Application steps: {doc.get('application_steps', 'Not specified')}. "
+                        f"Required documents: {doc.get('documents', 'Not specified')}. "
+                        f"Additional notes: {doc.get('notes', 'Not specified')}. "
                     )
             else:
-                context_str += "\n\n(No official scheme found.)\n"
-                
+                context_str = "No verified government scheme information was found for this query."
+
         except Exception as e:
-            context_str += f"\n\n[RAG ERROR] {str(e)}\n"
+            context_str = f"An error occurred while retrieving official information: {str(e)}"
 
-        prompt = f"""
-        You are AgriGPT, expert on Indian agricultural subsidies.
-
-        Farmer asked: "{query_clean}"
-
-        {context_str}
-
-        Provide:
-        1. Scheme name
-        2. Government level
-        3. Eligibility
-        4. Benefits
-        5. Application process
-
-        Use bullet points and simple language.
-        """
+        prompt = (
+            "You are AgriGPT SubsidyAgent. "
+            "You explain Indian agricultural subsidy schemes using ONLY verified official information provided below. "
+            "Do not invent schemes, eligibility criteria, benefits, or application rules. "
+            "If information is missing or unclear, state that clearly. "
+            "Do not generalize nationwide rules unless explicitly stated. "
+            "Present the information in simple, farmer-friendly language. "
+            "Avoid legal or technical jargon. "
+            "Do not provide advice beyond explaining what the scheme offers and how to apply. "
+            f"Farmer question: {query_clean}. "
+            f"Official information: {context_str}"
+        )
 
         try:
             result = query_groq_text(prompt)
-        except Exception as e:
-            result = f"Error: {e}"
+        except Exception:
+            result = "Subsidy information could not be generated at this time."
 
         return self.respond_and_record(query_clean, result, image_path)

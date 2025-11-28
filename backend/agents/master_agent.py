@@ -1,204 +1,186 @@
 """
-Master Agent Router (OPENAPI-SAFE - Pydantic Isolated)
-------------------------------------------------------
-- Pydantic models are LOCAL only (never exposed to FastAPI)
-- Uses get_agent_registry() factory
-- All outputs are strings
+Master Agent Router (LLM-FIRST, ROLE-AWARE)
+------------------------------------------
+✅ Fully LLM-based semantic + role routing
+✅ Assigns roles: primary / supporting / impact
+✅ Supports single or multi-agent (max 3)
+✅ Formatter ALWAYS runs once
+✅ CropAgent is LAST RESORT only
+✅ OpenAPI-safe
 """
 
 from __future__ import annotations
-from typing import Optional, List, Tuple, Dict, Any
-
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnableSequence
+from typing import Optional, Dict, Any, List
+import json
+import re
 
 from backend.core.langchain_tools import (
-    AGENT_DESCRIPTIONS,
-    NON_ROUTABLE_AGENTS,
     get_agent_registry,
+    NON_ROUTABLE_AGENTS,
+    AGENT_DESCRIPTIONS,
 )
 from backend.core.llm_client import get_llm
-from backend.services.text_service import query_groq_text
 
 MAX_QUERY_CHARS = 2000
-
-
-def _get_router_llm():
-    """Get fresh LLM instance."""
-    return get_llm()
-
-
-def _format_agent_descriptions() -> str:
-    """Format agent descriptions for prompt."""
-    lines = []
-    for agent in AGENT_DESCRIPTIONS:
-        name = str(agent.get("name", ""))
-        desc = str(agent.get("description", ""))
-        lines.append(f"- {name}: {desc}")
-    return "\n".join(lines)
+MAX_ROUTED_AGENTS = 3
 
 
 # ============================================================
-# MAIN API ENTRYPOINT
+# MAIN ENTRYPOINT
 # ============================================================
+def route_query(
+    query: Optional[str] = None,
+    image_path: Optional[str] = None
+) -> str:
 
-def route_query(query: Optional[str] = None, image_path: Optional[str] = None) -> str:
-    """
-    Main routing function - returns plain string (OpenAPI-safe).
-    """
     registry = get_agent_registry()
 
-    if query is not None:
-        query = query.strip() or None
+    if query:
+        query = query.strip()
 
     if query and len(query) > MAX_QUERY_CHARS:
-        return f"Query too long (>{MAX_QUERY_CHARS} chars). Please shorten."
+        return "Your question is too long. Please shorten it."
 
-    # MULTIMODAL (text + image)
-    if image_path and query:
-        pest_agent = registry["PestAgent"]
-        pest_output = str(pest_agent.handle_query(query=query, image_path=image_path))
-
-        agent_names, _ = _choose_agents_via_llm(query)
-
-        responses = []
-        for name in agent_names:
-            if name == "PestAgent":
-                continue
-            agent = registry.get(name)
-            if agent:
-                responses.append(str(agent.handle_query(query=query)))
-
-        merged = "\n\n---\n\n".join(responses) or "No text-based advice."
-
-        final_prompt = f"""
-        You are AgriGPT (Multimodal Expert).
-        Farmer question: "{query}"
-        Image diagnosis: {pest_output}
-        Expert guidance: {merged}
-        Provide one clear answer in farmer-friendly language.
-        """.strip()
-
-        combined = str(query_groq_text(final_prompt))
-        formatter = registry["FormatterAgent"]
-        return str(formatter.handle_query(combined))
-
-    # IMAGE ONLY
+    # --------------------------------------------------------
+    # IMAGE → PestAgent ONLY
+    # --------------------------------------------------------
     if image_path:
-        pest_agent = registry["PestAgent"]
-        resp = str(pest_agent.handle_query(query="", image_path=image_path))
-        formatter = registry["FormatterAgent"]
-        return str(formatter.handle_query(resp))
+        pest_output = registry["PestAgent"].handle_query(
+            query=query or "",
+            image_path=image_path,
+        )
 
-    # NO INPUT
+        payload = {
+            "user_query": query or "Image-based crop issue",
+            "routing_mode": "single_agent",
+            "agent_results": [
+                {
+                    "agent": "PestAgent",
+                    "role": "primary",
+                    "content": pest_output,
+                }
+            ],
+        }
+
+        return registry["FormatterAgent"].handle_query(
+            json.dumps(payload, ensure_ascii=False)
+        )
+
     if not query:
-        return "Please provide a text query or image."
+        return "Please ask an agriculture-related question."
 
-    # TEXT ONLY
-    return str(_run_text_pipeline(query, registry))
+    # --------------------------------------------------------
+    # ✅ LLM SEMANTIC + ROLE ROUTING
+    # --------------------------------------------------------
+    routed = llm_route_with_roles(query, registry)
 
+    # Hard fallback
+    if not routed:
+        routed = [{"agent": "CropAgent", "role": "primary"}]
 
-# ============================================================
-# TEXT PIPELINE
-# ============================================================
+    # Ensure exactly ONE primary
+    if not any(r["role"] == "primary" for r in routed):
+        routed[0]["role"] = "primary"
 
-def _run_text_pipeline(query: str, registry: Dict[str, Any]) -> str:
-    """Process text-only queries."""
-    agent_names, reasoning = _choose_agents_via_llm(query)
+    agent_results: List[Dict[str, str]] = []
 
-    outputs = []
-    for name in agent_names:
-        agent = registry.get(name)
-        if agent:
-            outputs.append(str(agent.handle_query(query=query)))
+    for item in routed[:MAX_ROUTED_AGENTS]:
+        agent_name = item["agent"]
+        role = item["role"]
 
-    if not outputs:
-        outputs.append(str(registry["CropAgent"].handle_query(query=query)))
+        output = registry[agent_name].handle_query(query=query)
 
-    merged = "\n\n---\n\n".join(outputs)
-    formatter = registry["FormatterAgent"]
-    final = str(formatter.handle_query(merged))
+        agent_results.append({
+            "agent": agent_name,
+            "role": role,
+            "content": output,
+        })
 
-    if reasoning:
-        final += f"\n\n_(Router: {reasoning})_"
+    payload = {
+        "user_query": query,
+        "routing_mode": "multi_agent" if len(agent_results) > 1 else "single_agent",
+        "agent_results": agent_results,
+    }
 
-    return final
-
-
-# ============================================================
-# LANGCHAIN ROUTER (PYDANTIC ISOLATED HERE)
-# ============================================================
-
-def _build_router_chain() -> RunnableSequence:
-    """
-    Build semantic router chain.
-    ⚠️ Pydantic is LOCAL only - never exposed to FastAPI.
-    """
-    agent_descriptions = _format_agent_descriptions()
-
-    template = """
-You are AgriGPT Router.
-Analyze the query and select 1-3 relevant agents.
-
-Available agents:
-{agent_descriptions}
-
-Return ONLY valid JSON (no markdown, no code blocks):
-{{
-    "agents": ["AgentName1", "AgentName2"],
-    "reason": "Brief explanation"
-}}
-
-Query: {query}
-"""
-
-    prompt = PromptTemplate(
-        template=template,
-        input_variables=["query"],
-        partial_variables={"agent_descriptions": agent_descriptions}
+    # ✅ Formatter ALWAYS runs once
+    return registry["FormatterAgent"].handle_query(
+        payload
     )
 
-    # ✅ Use StrOutputParser - no Pydantic in chain
-    chain = prompt | _get_router_llm() | StrOutputParser()
-    
-    return chain
 
+# ============================================================
+# LLM ROUTER WITH ROLE ASSIGNMENT
+# ============================================================
+def llm_route_with_roles(
+    query: str,
+    registry: Dict[str, Any],
+) -> List[Dict[str, str]]:
 
-def _choose_agents_via_llm(query: str) -> Tuple[List[str], str]:
-    """
-    Choose agents using LLM.
-    Returns: (agent_names, reason) - plain types only.
-    """
+    llm = get_llm()
+
+    agent_map = "\n".join(
+        f"- {a['name']}: {a['description']}"
+        for a in AGENT_DESCRIPTIONS
+    )
+
+    prompt = f"""
+You are an agricultural AI intent router.
+
+TASK:
+Select the best agent(s) AND assign roles.
+
+ROLES:
+- primary: main diagnosis or answer
+- supporting: adds clarification
+- impact: explains effects or next steps
+
+STRICT RULES:
+- Select ONE to THREE agents only
+- EXACTLY ONE agent must be primary
+- NEVER select FormatterAgent
+- NEVER select CropAgent IF another agent fits
+- CropAgent only if no others apply
+- Output VALID JSON ARRAY ONLY
+
+AVAILABLE AGENTS:
+{agent_map}
+
+FARMER QUERY:
+{query}
+
+OUTPUT FORMAT:
+[
+  {{ "agent": "PestAgent", "role": "primary" }},
+  {{ "agent": "YieldAgent", "role": "impact" }}
+]
+"""
+
     try:
-        chain = _build_router_chain()
-        raw_output = chain.invoke({"query": query})
-        
-        # Manual JSON parsing (OpenAPI-safe)
-        import json
-        import re
-        
-        # Extract JSON from markdown wrapper if present
-        json_match = re.search(r'\{.*\}', raw_output, re.DOTALL)
-        if json_match:
-            result = json.loads(json_match.group())
-        else:
-            result = {"agents": ["CropAgent"], "reason": "Parse failed"}
-        
-        # Extract agents
-        agents = result.get("agents", [])
-        if isinstance(agents, str):
-            agents = [agents]
-        
-        # Filter non-routable agents
-        agents = [a for a in agents if a not in NON_ROUTABLE_AGENTS]
-        
-        reason = str(result.get("reason", ""))
-        
-        if not agents:
-            return ["CropAgent"], "Fallback: no valid agents"
-        
-        return agents, reason
+        raw = llm.invoke(prompt).content
+        match = re.search(r"\[.*\]", raw, re.DOTALL)
 
-    except Exception as e:
-        return ["CropAgent"], f"Router failed: {str(e)}"
+        if not match:
+            raise ValueError("No JSON")
+
+        parsed = json.loads(match.group())
+
+        cleaned = []
+        seen = set()
+
+        for item in parsed:
+            agent = item.get("agent")
+            role = item.get("role")
+
+            if (
+                agent in registry
+                and agent not in NON_ROUTABLE_AGENTS
+                and agent not in seen
+                and role in {"primary", "supporting", "impact"}
+            ):
+                cleaned.append({"agent": agent, "role": role})
+                seen.add(agent)
+
+        return cleaned[:MAX_ROUTED_AGENTS]
+
+    except Exception:
+        return []

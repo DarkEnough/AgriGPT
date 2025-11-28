@@ -6,92 +6,58 @@ from backend.agents.agri_agent_base import AgriAgentBase
 
 class YieldAgent(AgriAgentBase):
     """
-    Yield Optimization Agent
-    ------------------------
-    Gives farmers:
-    - Expected yield range for a crop
-    - Root causes for low yield
-    - Stage-wise improvement plan
-    - Simple, practical recommendations
+    YieldAgent:
+    Identifies reasons for low yield and provides
+    high-level, conditional yield improvement guidance.
     """
 
     name = "YieldAgent"
 
     def handle_query(self, query: str = None, image_path: str = None) -> str:
-        """
-        Handles all yield-related questions.
-        Image input is ignored for this agent.
-        """
 
-        # ------------------------------------------------------
-        # CASE 0 — Empty or missing text
-        # ------------------------------------------------------
-        if not query or not query.strip():
-            msg = (
-                "Please describe your crop and the yield problem. Examples:\n"
-                "- 'My rice yield is low this season'\n"
-                "- 'Maize giving only 2 tons per hectare'\n"
-                "- 'Tomato plants producing fewer fruits'\n"
+        if not query or not isinstance(query, str) or not query.strip():
+            response = (
+                "Please describe the crop and the yield issue you are facing. "
+                "For example, low harvest, poor fruit setting, or reduced grain output."
             )
-            return self.respond_and_record(
-                query="No query provided",
-                response=msg,
-                image_path=image_path
-            )
+            return self.respond_and_record("", response, image_path)
 
-        query_clean = query.strip()
+        clean_query = query.strip()
 
-        # ------------------------------------------------------
-        # CASE 1 — Build LLM prompt
-        # ------------------------------------------------------
-        prompt = f"""
-        You are **AgriGPT – Yield Improvement Advisor**.
+        prompt = (
+            "You are AgriGPT YieldAgent. "
+            "Your role is to analyze yield-related problems conservatively. "
+            "Do not give guaranteed yield numbers or exact targets. "
+            "Use conditional language only. "
+            "Do not prescribe chemical dosages or irrigation schedules. "
+            "Do not override crop, irrigation, or pest specialists. "
 
-        The farmer asks:
-        \"\"\"{query_clean}\"\"\"
+            "Explain the following clearly and simply: "
+            "First, describe broad expected yield ranges only if crop and region are mentioned, "
+            "and clearly state that actual yield depends on conditions. "
 
-        Provide clear guidance with:
+            "Next, identify the most common limiting factors that reduce yield, "
+            "such as soil fertility gaps, water stress, planting time, seed quality, "
+            "pest pressure, or climate stress. "
 
-        **1. Expected Yield Range**
-        - Typical India/global yield range for this crop.
+            "Then, suggest practical next steps focused on diagnosis and prioritization only, "
+            "for example soil testing, irrigation review, or pest inspection, "
+            "without giving exact schedules or dosages. "
 
-        **2. Causes of Low Yield**
-        Cover major factors:
-        - Soil nutrient imbalance
-        - Fertilizer schedule mistakes
-        - Water stress (too much or too little)
-        - Pests or diseases affecting yield
-        - Poor seed variety
-        - Climate or incorrect planting time
+            "If important details are missing, say so clearly. "
+            "Keep the language farmer-friendly and non-technical. "
+            "Avoid repetition and avoid theory. "
 
-        **3. Practical Improvement Steps**
-        Include:
-        - Ideal fertilizer schedule (stage-wise)
-        - Correct irrigation intervals
-        - Soil enrichment methods
-        - Pest/disease prevention tips
-        - Recommended varieties for better yield
+            f"Farmer question: {clean_query}"
+        )
 
-        **4. Language Style**
-        - Short bullet points
-        - Simple Indian farmer-friendly tone
-        - No technical jargon
-        - Clear, step-by-step format
-        """
-
-        # ------------------------------------------------------
-        # CASE 2 — Query Groq Safely
-        # ------------------------------------------------------
         try:
-            output = query_groq_text(prompt)
-        except Exception as e:
-            output = f"Error generating yield advice: {str(e)}"
+            result = query_groq_text(prompt)
+        except Exception:
+            result = "Yield analysis could not be generated at this time."
 
-        # ------------------------------------------------------
-        # CASE 3 — Log + Return
-        # ------------------------------------------------------
         return self.respond_and_record(
-            query=query_clean,
-            response=output,
-            image_path=image_path
+            query=clean_query,
+            response=result,
+            image_path=image_path,
         )
