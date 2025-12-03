@@ -146,8 +146,10 @@ Expert Agent Responses:
 INSTRUCTIONS
 ==================================================
 
-1. **SYNTHESIZE (Don't just list)**:
-   - If multiple agents responded (e.g., PestAgent + CropAgent), weave their insights together.
+1. **SYNTHESIZE (Direct & Punchy)**:
+   - **SKIP THE PREAMBLE**. Do not say "We understand...", "Based on the analysis...", or "The user is asking...".
+   - Start IMMEDIATELY with the answer or summary.
+   - If multiple agents responded, weave insights together.
    - Start with a direct answer to the user's core question.
    - If there is an image diagnosis, mention it early ("Based on the image, we see...").
 
@@ -156,9 +158,10 @@ INSTRUCTIONS
    - Use "We" or "I" to sound like a helpful assistant.
 
 3. **FORMATTING (Markdown Allowed)**:
-   - Use **Bold** for emphasis.
+   - Use **Bold** for emphasis and headings. 
    - Use `### Headers` to separate sections (e.g., "Diagnosis", "Treatment", "Prevention").
    - Use bullet points for lists.
+   - Use **Bold** for the title of the response.
 
 4. **SAFETY**:
    - Do not invent new chemical advice not present in the expert text.
@@ -168,7 +171,7 @@ INSTRUCTIONS
 FINAL OUTPUT STRUCTURE
 ==================================================
 
-# Title (Clear & Short)
+# **Title (Clear & Short)**
 
 **Summary**: [1-2 sentences summarizing the situation]
 
@@ -191,5 +194,5 @@ FINAL OUTPUT STRUCTURE
             query=user_query,
             response=formatted,
             image_path=image_path,
-            meta=meta,   # ✅ LOG ROLES HERE
+            meta=meta,
         )
