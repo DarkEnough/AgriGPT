@@ -12,7 +12,7 @@ class IrrigationAgent(AgriAgentBase):
 
     name = "IrrigationAgent"
 
-    def handle_query(self, query: str = None, image_path: str = None) -> str:
+    def handle_query(self, query: str = None, image_path: str = None, chat_history: str = None) -> str:
 
         # --------------------------------------------------
         # Input validation
@@ -52,6 +52,7 @@ class IrrigationAgent(AgriAgentBase):
             "If essential details are missing, say so clearly.",
             "Avoid exact schedules when conditions are unknown.",
 
+            f"PREVIOUS CONTEXT: {chat_history if chat_history else 'None'}",
             f"FARMER QUERY: {clean_query}",
 
             "RESPONSE INSTRUCTIONS:",

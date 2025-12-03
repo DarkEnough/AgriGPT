@@ -13,7 +13,7 @@ class YieldAgent(AgriAgentBase):
 
     name = "YieldAgent"
 
-    def handle_query(self, query: str = None, image_path: str = None) -> str:
+    def handle_query(self, query: str = None, image_path: str = None, chat_history: str = None) -> str:
 
         if not query or not isinstance(query, str) or not query.strip():
             response = (
@@ -47,7 +47,8 @@ class YieldAgent(AgriAgentBase):
             "If important details are missing, say so clearly. "
             "Keep the language farmer-friendly and non-technical. "
             "Avoid repetition and avoid theory. "
-
+            
+            f"PREVIOUS CONTEXT: {chat_history if chat_history else 'None'}"
             f"Farmer question: {clean_query}"
         )
 

@@ -18,6 +18,7 @@ class AgriAgentBase(ABC):
         self,
         query: Optional[str] = None,
         image_path: Optional[str] = None,
+        chat_history: Optional[str] = None,
     ) -> str:
         pass
 

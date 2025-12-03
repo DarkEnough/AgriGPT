@@ -19,7 +19,7 @@ class FormatterAgent(AgriAgentBase):
     # --------------------------------------------------
     # PUBLIC ENTRYPOINT
     # --------------------------------------------------
-    def handle_query(self, payload: Any, image_path: str = None) -> str:
+    def handle_query(self, payload: Any, image_path: str = None, chat_history: str = None) -> str:
 
         # --------------------------------------------------
         # FAILSAFE — plain string input

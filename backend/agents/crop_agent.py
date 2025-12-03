@@ -13,7 +13,7 @@ class CropAgent(AgriAgentBase):
 
     name = "CropAgent"
 
-    def handle_query(self, query: str = None, image_path: str = None) -> str:
+    def handle_query(self, query: str = None, image_path: str = None, chat_history: str = None) -> str:
 
         # --------------------------------------------------
         # Input validation
@@ -42,6 +42,7 @@ class CropAgent(AgriAgentBase):
             "SAFETY RULES: Do NOT guess soil type, crop variety, or region unless stated.",
             "Use conditional language when required. If essential details are missing, say so clearly.",
             "Do NOT invent chemical names or dosages.",
+            f"PREVIOUS CONTEXT: {chat_history if chat_history else 'None'}",
             f"FARMER QUERY: {clean_query}",
             "RESPONSE INSTRUCTIONS:",
             "Give practical, actionable crop management advice.",

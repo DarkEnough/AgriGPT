@@ -12,7 +12,7 @@ class PestAgent(AgriAgentBase):
 
     name = "PestAgent"
 
-    def handle_query(self, query: str = None, image_path: str = None) -> str:
+    def handle_query(self, query: str = None, image_path: str = None, chat_history: str = None) -> str:
 
         # --------------------------------------------------
         # CASE 0 — No input
@@ -56,6 +56,7 @@ class PestAgent(AgriAgentBase):
         text_prompt = (
             "You are AgriGPT PestAgent. "
             "Analyze the farmer's description of crop symptoms. "
+            f"CONTEXT FROM PREVIOUS CHAT: {chat_history if chat_history else 'None'} "
             "1. VALIDATE: Do these symptoms match known pests/diseases? "
             "2. DIAGNOSE: List top 2-3 probable causes. "
             "3. EXPLAIN: Why do these symptoms occur? "

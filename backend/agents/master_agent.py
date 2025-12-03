@@ -8,6 +8,7 @@ Master Agent Router (LLM-FIRST, SCORING-AWARE)
 ✅ Formatter ALWAYS runs once
 ✅ CropAgent is LAST RESORT only
 ✅ OpenAPI-safe
+✅ CONTEXT-AWARE (Memory)
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from backend.core.langchain_tools import (
     AGENT_DESCRIPTIONS,
 )
 from backend.core.llm_client import get_llm
+from backend.core.memory_manager import get_chat_history, add_message_to_history, format_history_for_prompt
 
 MAX_QUERY_CHARS = 2000
 MAX_ROUTED_AGENTS = 3
@@ -35,7 +37,8 @@ SECONDARY_SCORE_THRESHOLD = 50  # Supporting agents must be relevant
 # ============================================================
 def route_query(
     query: Optional[str] = None,
-    image_path: Optional[str] = None
+    image_path: Optional[str] = None,
+    session_id: Optional[str] = None 
 ) -> str:
 
     registry = get_agent_registry()
@@ -45,6 +48,10 @@ def route_query(
     
     if clean_query and len(clean_query) > MAX_QUERY_CHARS:
         return "Your question is too long. Please shorten it."
+    
+    # 2. Get History
+    chat_history_list = get_chat_history(session_id)
+    chat_history_str = format_history_for_prompt(chat_history_list)
 
     # ========================================================
     # PATH A: IMAGE-ONLY (Direct Diagnosis)
@@ -53,6 +60,7 @@ def route_query(
         pest_output = registry["PestAgent"].handle_query(
             query="",
             image_path=image_path,
+            chat_history=chat_history_str
         )
 
         payload = {
@@ -67,8 +75,17 @@ def route_query(
                 }
             ],
         }
-
-        return registry["FormatterAgent"].handle_query(payload) # Pass dict directly
+        
+        # Save Interaction
+        if session_id:
+             add_message_to_history(session_id, "user", "Uploaded an image")
+             
+        response = registry["FormatterAgent"].handle_query(payload) 
+        
+        if session_id:
+             add_message_to_history(session_id, "assistant", response)
+             
+        return response
 
     if not clean_query:
         return "Please ask an agriculture-related question."
@@ -76,8 +93,8 @@ def route_query(
     # ========================================================
     # PATH B & C: TEXT-ONLY OR MULTIMODAL
     # ========================================================
-    # 1. Semantic Routing (Text Intent)
-    routed = llm_route_with_scores(clean_query, registry)
+    # 1. Semantic Routing (Text Intent + History)
+    routed = llm_route_with_scores(clean_query, registry, chat_history_str)
 
     # 2. Fallback Logic
     if not routed:
@@ -88,11 +105,9 @@ def route_query(
         routed[0]["role"] = "primary"
 
     # 4. Image Injection (Multimodal Only)
-    # If we have an image, PestAgent MUST be involved.
     if image_path:
         pest_in_route = any(r["agent"] == "PestAgent" for r in routed)
         if not pest_in_route:
-            # Inject as Supporting
             routed.append({
                 "agent": "PestAgent", 
                 "role": "supporting", 
@@ -105,9 +120,7 @@ def route_query(
     # Limit execution count
     final_execution_list = routed[:MAX_ROUTED_AGENTS]
     
-    # Re-verify PestAgent presence if image exists (in case it was sliced off)
     if image_path and not any(r["agent"] == "PestAgent" for r in final_execution_list):
-         # Force replace last agent with PestAgent
          final_execution_list[-1] = {"agent": "PestAgent", "role": "supporting", "score": 100}
 
     for item in final_execution_list:
@@ -118,11 +131,18 @@ def route_query(
         if agent_name not in registry:
             continue
 
-        # Pass image ONLY to PestAgent
+        # Pass History to Agent
         if agent_name == "PestAgent" and image_path:
-            output = registry[agent_name].handle_query(query=clean_query, image_path=image_path)
+            output = registry[agent_name].handle_query(
+                query=clean_query, 
+                image_path=image_path,
+                chat_history=chat_history_str
+            )
         else:
-            output = registry[agent_name].handle_query(query=clean_query)
+            output = registry[agent_name].handle_query(
+                query=clean_query,
+                chat_history=chat_history_str
+            )
 
         agent_results.append({
             "agent": agent_name,
@@ -139,6 +159,11 @@ def route_query(
     }
 
     formatted_response = registry["FormatterAgent"].handle_query(payload)
+
+    # 7. Save Interaction to Memory
+    if session_id:
+        add_message_to_history(session_id, "user", clean_query)
+        add_message_to_history(session_id, "assistant", formatted_response)
 
     # Log Router Confidence
     score_summary = ", ".join(
@@ -159,6 +184,7 @@ def route_query(
 def llm_route_with_scores(
     query: str,
     registry: Dict[str, Any],
+    chat_history: str = ""
 ) -> List[Dict[str, Any]]:
 
     llm = get_llm()
@@ -177,16 +203,20 @@ Analyze the farmer's query and assign a RELEVANCE SCORE (0-100) to EACH availabl
 AVAILABLE AGENTS:
 {agent_map}
 
+PREVIOUS CONVERSATION:
+{chat_history}
+
 RULES:
-1. **Score 0-100**: How well does the agent fit the query?
+1. **Context Awareness**: If the user says "it", "that", or refers to a previous topic, use the HISTORY to infer the crop or issue.
+2. **Score 0-100**: How well does the agent fit the query?
    - 90-100: Perfect match (Dominant Intent)
    - 70-89: Strong match
    - 50-69: Weak/Partial match
    - <50: Irrelevant
-2. **Dominant Intent**: Identify the single most relevant agent.
-3. **Multi-Intent**: Only include other agents if they truly cover a DISTINCT part of the query (score > 50).
-4. **CropAgent Fallback**: If specific intent is unclear, CropAgent might have a moderate score, but prefer specific agents (Pest, Subsidy, etc.) if symptoms match.
-5. **Output JSON ONLY**: Return a list of objects.
+3. **Dominant Intent**: Identify the single most relevant agent.
+4. **Multi-Intent**: Only include other agents if they truly cover a DISTINCT part of the query (score > 50).
+5. **CropAgent Fallback**: If specific intent is unclear, CropAgent might have a moderate score, but prefer specific agents (Pest, Subsidy, etc.) if symptoms match.
+6. **Output JSON ONLY**: Return a list of objects.
 
 FARMER QUERY:
 "{query}"
@@ -243,8 +273,6 @@ OUTPUT FORMAT (JSON Array):
                 "score": best_candidate["score"]
             })
         else:
-            # If even the best score is weak, default to CropAgent (General) 
-            # unless the best candidate IS CropAgent (then keep it)
             if best_candidate["agent"] == "CropAgent":
                  final_routes.append({
                      "agent": "CropAgent", 
@@ -252,9 +280,6 @@ OUTPUT FORMAT (JSON Array):
                      "score": best_candidate["score"]
                  })
             else:
-                 # Fallback: Low confidence on specific agents -> General CropAgent
-                 # If score < 75, we treat it as "General/Unsure" -> CropAgent.
-                 # However, to be safe, let's include the best match if it's > 50, otherwise CropAgent.
                  if best_candidate["score"] >= 50:
                      final_routes.append({
                          "agent": best_candidate["agent"], 
@@ -265,13 +290,10 @@ OUTPUT FORMAT (JSON Array):
                      return [{"agent": "CropAgent", "role": "primary", "score": 0}]
 
         # --- Secondary Selection ---
-        primary_agent = final_routes[0]["agent"]
-        
         for cand in candidates[1:]:
             if len(final_routes) >= MAX_ROUTED_AGENTS:
                 break
             
-            # Threshold check for secondary
             if cand["score"] >= SECONDARY_SCORE_THRESHOLD:
                 final_routes.append({
                     "agent": cand["agent"], 

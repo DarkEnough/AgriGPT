@@ -5,6 +5,7 @@ import tempfile
 import os
 import time
 import uuid
+from typing import Optional
 
 router = APIRouter(prefix="/ask", tags=["Query"])
 
@@ -14,7 +15,10 @@ MAX_QUERY_CHARS = 2000
 
 
 @router.post("/text")
-async def ask_text(query: str = Form(...)):
+async def ask_text(
+    query: str = Form(...),
+    session_id: Optional[str] = Form(None) # ✅ NEW
+):
     """Text-only farming query endpoint."""
     start = time.time()
     
@@ -28,7 +32,7 @@ async def ask_text(query: str = Form(...)):
     from backend.agents.master_agent import route_query
     
     try:
-        response = route_query(query=query, image_path=None)
+        response = route_query(query=query, image_path=None, session_id=session_id)
     except Exception as e:
         raise HTTPException(500, f"Error: {str(e)}")
     
@@ -44,7 +48,8 @@ async def ask_text(query: str = Form(...)):
 @router.post("/image")
 async def ask_image(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    session_id: Optional[str] = Form(None) # ✅ NEW
 ):
     """Image-only crop analysis endpoint."""
     start = time.time()
@@ -69,7 +74,7 @@ async def ask_image(
             tmp_path = tmp.name
         
         from backend.agents.master_agent import route_query
-        response = route_query(query=None, image_path=tmp_path)
+        response = route_query(query=None, image_path=tmp_path, session_id=session_id)
         
         background_tasks.add_task(os.remove, tmp_path)
         
@@ -93,7 +98,8 @@ async def ask_image(
 async def ask_chat(
     background_tasks: BackgroundTasks,
     query: str = Form(...),
-    file: UploadFile = File(None)
+    file: UploadFile = File(None),
+    session_id: Optional[str] = Form(None) # ✅ NEW
 ):
     """
     Multimodal endpoint: text + optional image.
@@ -113,7 +119,7 @@ async def ask_chat(
     # Text only (no file uploaded)
     if not file or not file.filename:
         try:
-            response = route_query(query=query_clean, image_path=None)
+            response = route_query(query=query_clean, image_path=None, session_id=session_id)
         except Exception as e:
             raise HTTPException(500, f"Error: {str(e)}")
         
@@ -144,7 +150,7 @@ async def ask_chat(
             tmp.write(data)
             tmp_path = tmp.name
         
-        response = route_query(query=query_clean, image_path=tmp_path)
+        response = route_query(query=query_clean, image_path=tmp_path, session_id=session_id)
         
         background_tasks.add_task(os.remove, tmp_path)
         

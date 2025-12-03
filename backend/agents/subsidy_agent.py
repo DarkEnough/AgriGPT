@@ -22,7 +22,7 @@ class SubsidyAgent(AgriAgentBase):
         text = text.replace("\x00", "").replace("\u200c", "")
         return text.strip()
 
-    def handle_query(self, query: str = None, image_path: str = None) -> str:
+    def handle_query(self, query: str = None, image_path: str = None, chat_history: str = None) -> str:
 
         if not query or not query.strip():
             response = (
@@ -64,6 +64,7 @@ class SubsidyAgent(AgriAgentBase):
             "Present the information in simple, farmer-friendly language. "
             "Avoid legal or technical jargon. "
             "Do not provide advice beyond explaining what the scheme offers and how to apply. "
+            f"Previous context: {chat_history if chat_history else 'None'}. "
             f"Farmer question: {query_clean}. "
             f"Official information: {context_str}"
         )
