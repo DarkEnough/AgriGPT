@@ -9,7 +9,13 @@ from backend.core.langchain_tools import (
     AGENT_DESCRIPTIONS,
 )
 from backend.core.llm_client import get_llm
-from backend.core.memory_manager import get_chat_history, add_message_to_history, format_history_for_prompt
+from backend.core.memory_manager import (
+    get_chat_history, 
+    add_message_to_history, 
+    format_history_for_prompt,
+    set_session_image,
+    get_session_image,
+)
 
 MAX_QUERY_CHARS = 2000
 MAX_ROUTED_AGENTS = 3
@@ -33,6 +39,12 @@ def route_query(
     
     chat_history_list = get_chat_history(session_id)
     chat_history_str = format_history_for_prompt(chat_history_list)
+    
+    # Image Persistence: Save new image or retrieve saved one
+    if image_path and session_id:
+        set_session_image(session_id, image_path)
+    elif not image_path and session_id:
+        image_path = get_session_image(session_id)
 
     # IMAGE-ONLY (Direct Diagnosis)
     if image_path and not clean_query:
@@ -77,6 +89,24 @@ def route_query(
     if not any(r["role"] == "primary" for r in routed):
         routed[0]["role"] = "primary"
 
+    # CLARIFICATION CHECK
+    # If the Router chose ClarificationAgent as PRIMARY, execute it alone.
+    primary_agent = next((r for r in routed if r["role"] == "primary"), None)
+    
+    if primary_agent and primary_agent["agent"] == "ClarificationAgent":
+        clarification_output = registry["ClarificationAgent"].handle_query(
+            query=clean_query,
+            image_path=image_path,
+            chat_history=chat_history_str
+        )
+        
+        if session_id:
+            add_message_to_history(session_id, "user", clean_query)
+            add_message_to_history(session_id, "assistant", clarification_output)
+            
+        return clarification_output
+
+    # Image Injection (Multimodal)
     if image_path:
         pest_in_route = any(r["agent"] == "PestAgent" for r in routed)
         if not pest_in_route:
@@ -101,7 +131,6 @@ def route_query(
         if agent_name not in registry:
             continue
 
-        # Pass History to Agent
         if agent_name == "PestAgent" and image_path:
             output = registry[agent_name].handle_query(
                 query=clean_query, 
@@ -145,7 +174,6 @@ def route_query(
     return formatted_response
 
 
-# LLM ROUTER WITH SCORING & THRESHOLDS
 def llm_route_with_scores(
     query: str,
     registry: Dict[str, Any],
@@ -225,7 +253,6 @@ OUTPUT FORMAT (JSON Array):
         if not candidates:
             return []
 
-        # Primary Selection
         best_candidate = candidates[0]
         if best_candidate["score"] >= PRIMARY_SCORE_THRESHOLD:
             final_routes.append({
@@ -250,7 +277,6 @@ OUTPUT FORMAT (JSON Array):
                  else:
                      return [{"agent": "CropAgent", "role": "primary", "score": 0}]
 
-        # Secondary Selection
         for cand in candidates[1:]:
             if len(final_routes) >= MAX_ROUTED_AGENTS:
                 break

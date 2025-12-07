@@ -21,3 +21,6 @@ __pycache__/
 *.pyd
 *.pyd
 .pytest_cache/
+
+# Session images
+backend/session_images/

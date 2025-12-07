@@ -7,6 +7,7 @@ from backend.agents.pest_agent import PestAgent
 from backend.agents.subsidy_agent import SubsidyAgent
 from backend.agents.yield_agent import YieldAgent
 from backend.agents.formatter_agent import FormatterAgent
+from backend.agents.clarification_agent import ClarificationAgent
 
 AgentRegistry: TypeAlias = Dict[str, object]
 
@@ -24,6 +25,7 @@ def get_agent_registry() -> AgentRegistry:
         "SubsidyAgent": SubsidyAgent(),
         "YieldAgent": YieldAgent(),
         "FormatterAgent": FormatterAgent(),
+        "ClarificationAgent": ClarificationAgent(),
     }
 
 # ROUTER METADATA 
@@ -73,6 +75,17 @@ AGENT_DESCRIPTIONS: List[dict] = [
             "Use for PM-Kisan, loan support, crop insurance, "
             "drip irrigation subsidy, equipment or machinery grants, "
             "and eligibility for government financial assistance."
+        ),
+    },
+    {
+        "name": "ClarificationAgent",
+        "description": (
+            "Ambiguity detection and conversational handling. "
+            "Use this agent when the user's query is: "
+            "1. Vague or missing key details (e.g., 'My plant is sick' but no crop/symptom). "
+            "2. Conversational (greeting, thanks, meta-questions like 'Who are you?'). "
+            "3. A follow-up with unclear pronouns ('it', 'that') that the history might not fully resolve. "
+            "This agent asks clarifying questions instead of guessing."
         ),
     },
 ]
